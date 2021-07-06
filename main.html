@@ -107,30 +107,32 @@ class Agent {
 		this.mesh.material.color.setHex( 0xf54242 ) ;
 	}
 	accumulateForce() {
-		
-		des = new THREE.Vector3(0,0,0);
+	
+		let state = this.fsm.state;
+		console.log(this.fsm.state);	
+		var des = 0; 
 		if (ghost !== null){
 			des = agents[0].pos.distanceTo(ghost.pos);
-			if(des<60)this.force.copy(this.ghostAvoidForce(ghost.pos));
+			if(des<=60&&state==='flee')this.force.copy(this.ghostAvoidForce(ghost.pos));
 		}		
 		
 		/////////////////////////////
-		let state = this.fsm.state;
-		console.log(this.fsm.state);
-		
-		if(des<80&&state==='idle'){
+	
+		if(des<=60&&state==='idle'){
 			this.setFSMRun();
 			let push = new THREE.Vector3();
-			for (let i = 0; i < 1; i++) {
-				let point = this.pos.clone();
-				push.add(point.setLength(120 / point.length()));
-			}
+			
+			let point = this.pos.clone();
+			push.add(point.setLength(120 / point.length()));
+			
 			this.force.add(push);
 		}
-		else if(des>80&&state==='flee'){
+		else if(des>60&&state==='flee'){
 			this.setFSMStop();
 			this.force.set(0,0,0);
 			this.vel.set(0,0,0);
+			ghost.force.set(0,0,0);
+			ghost.vel.set(0,0,0);
 		}
 
 	}
@@ -156,7 +158,7 @@ class Ghost {
 		scene.add (mesh);
 		
 		this.ARRIVAL_R = 30;
-		this.MAXSPEED = 100;
+		this.MAXSPEED = 120;
 		this.angle = 0;
 	}
 	
@@ -193,10 +195,10 @@ class Ghost {
 				perp.subVectors (point, vhat.clone().setLength(proj));
 				let overlap = obs[i].size + this.size - perp.length();
 				if (overlap > 0 && proj < dist) {
-					theOne = obs[i]
-					dist = proj
+					theOne = obs[i];
+					dist = proj;
 					perp.setLength (K*overlap);
-					perp.negate()
+					perp.negate();
 				}
 			}
 		}
@@ -270,7 +272,6 @@ var raycaster;
 var mouse = new THREE.Vector2();
 var pickables = [];
 var agents = [];
-var des;
 var ghost;
 
 initFSM();
