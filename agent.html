@@ -110,7 +110,7 @@ class Avatar {
 		if (this.steerMode === 'FLEE')
 			sign = -1;
 	
-	 return targetPos.clone().sub(this.pos).normalize().multiplyScalar(sign*this.MAXSPEED).sub(this.vel);
+		return targetPos.clone().sub(this.pos).normalize().multiplyScalar(sign*this.MAXSPEED).sub(this.vel);
 	}
 
 	setBrake (brake) {  // make the avatar stop gracefully
@@ -136,17 +136,18 @@ class Agent extends Avatar {
    constructor (pos, mesh, name = '', fsm) {
       super (pos, mesh);
 	  this.fsm = fsm;
-	  // initial state got from fsm.state;
 	  this.stateSign = null;
 	  this.name = name;
    }
    
    update (dt) {
-   
+		
 		//	debugger;
 		if( this.name == 'human') super.update (dt);  // calling avatar update
 		else if( this.name == 'ghost' ){
+		
 			keyboard.update();
+			
 			if ( keyboard.pressed("left") ) 
 				angle += 0.03;               
 			if ( keyboard.pressed("right") )
@@ -241,6 +242,7 @@ function agentMesh (scale=1, _color='cyan') {
 }
 
 function stateSign () {
+
 	let loader = new THREE.TextureLoader();
 	let idleMap = loader.load ("https://i.imgur.com/wMH2lff.png");
 	let fleeMap = loader.load ("https://i.imgur.com/T3xmLmy.png");
@@ -252,6 +254,7 @@ function stateSign () {
 	let preyStateSign = new THREE.Group();
 	preyStateSign.add (idleMesh,fleeMesh);
 	return preyStateSign;
+	
 }
 
 function init() {
@@ -293,7 +296,7 @@ function init() {
 	preditor.mesh.add(gyro);
 
 	for (let i = 0; i < 3; i++) {
-		prey = new Agent (new THREE.Vector3(Math.random()*200-100,0,Math.random()*200-100),agentMesh (1,'cyan'), 'human', initFSM());
+		prey = new Agent (randomPosZX(-100,100),agentMesh (1,'cyan'), 'human', initFSM());
 		prey.stateSign = stateSign();
 		scene.add (prey.stateSign);
 		preys.push(prey);
@@ -309,7 +312,7 @@ function randomPosZX(min,max) {
 	let x = min + (max-min)*Math.random();
 	let z = min + (max-min)*Math.random();
 	
-	return new THREE.Vector3();//x,0,z);
+	return new THREE.Vector3(x,0,z);
 }
 
 
@@ -355,7 +358,7 @@ function scaleStateSign(prey) {
 }
 
 function render() {
-  renderer.render(scene, camera);
+	renderer.render(scene, camera);
 }
 
 </script>
