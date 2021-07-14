@@ -10,8 +10,7 @@
   width: 100%;
   padding: 10px;
   text-align: center;
-  color: #851338;
-  font-size : 25px;
+  color: #ffff00
 }
 
 body {
@@ -21,14 +20,21 @@ body {
 </head>
 
 <body> 
- <div id="info">Idle and Flee<br/>
- <div id="state">Idle.....<br/>
- </div>
- <script src="state-machine.js"></script>
- <script src="https://threejs.org/build/three.min.js"></script>
- <script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
- <script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
-<script>
+<div id="info">Agents with Brains
+<br>
+<p id='preyState'></p>
+</div>
+
+<script src="state-machine.js"></script>
+<script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
+<script src="https://jyunming-chen.github.io/tutsplus/js/KeyboardState.js"></script>
+
+<script type='module'>
+
+
+import * as THREE from "https://threejs.org/build/three.module.js";
+import { OrbitControls } from "https://threejs.org/examples/jsm/controls/OrbitControls.js";
+import { Gyroscope } from "https://threejs.org/examples/jsm/misc/Gyroscope.js";
 
 // IIFE addition of clamp function
 ( function( ) {
@@ -37,205 +43,193 @@ body {
       } 
 } )();
 
-
-
-function initFSM () {
- var fsm = new StateMachine({
-    init: 'idle',
-    transitions: [
-      { name: 'run', from: 'idle',  to: 'flee' },
-      { name: 'stop', from: 'flee', to: 'idle'  },
-	  { name: 'run', from: 'flee', to: 'flee'  },
-	  { name: 'stop', from: 'idle', to: 'idle'  },
-	]
-	});
-	return fsm;
-}
-
 class Avatar {
-	 constructor(pos, mesh) {
-	  this.pos = pos.clone();
-	  this.vel = new THREE.Vector3();
-	  this.force = new THREE.Vector3();
-	  this.MAXSPEED = 50;
-	  this.ARRIVAL_R = 30;
-	  this.target = null;
-	  this.steermode = '';
 
-	  this.size = 3;    
-	  this.mesh = mesh;
-	  scene.add (mesh);
+	  constructor(pos, mesh) {
+			this.pos = pos.clone();
+			this.vel = new THREE.Vector3();
+			this.force = new THREE.Vector3();
+			this.MAXSPEED = 50;
+			this.ARRIVAL_R = 30;
+			
+			this.size = 3;    
+			this.angle = 0; // for orientable agent
+			this.mesh = mesh;
+			scene.add (mesh);
 
-	  // for orientable agent
-	  this.angle = 0;
-	 }
-  
- update(dt) {
-	 //console.log ('in avatar update ...');
-
-	 this.accumulateForce();
-
-	 // obstacles
-	 let obs = scene.obstacles;
-
-	 // pick the most threatening one
-	 let theOne = null;
-	 let dist = 1e10;
-	 let vhat = this.vel.clone().normalize();
-	 const REACH = 50;
-	 const K = 5;
-	 let perp;
-
-	for (let i = 0; i < obs.length; i++) {
-		let point = obs[i].center.clone().sub (this.pos) // c-p
-		let proj  = point.dot(vhat);
-		if (proj > 0 && proj < REACH) {
-			perp = new THREE.Vector3();
-			perp.subVectors (point, vhat.clone().setLength(proj));
-			let overlap = obs[i].size + this.size - perp.length();
-			if (overlap > 0 && proj < dist) {
-				theOne = obs[i]
-				dist = proj
-				perp.setLength (K*overlap);
-				perp.negate()
-			}
-		}		
-	}
-	 if (theOne)
-	 this.force.add (perp);
-	 //////////////////////////
-	 this.vel.add(this.force.clone().multiplyScalar(dt));
-
-	 // ARRIVAL: velocity modulation
-	  if (this.target !== null) {   
-		let diff = this.target.clone().sub(this.pos)
-		let dst = diff.length();
-		if (dst < this.ARRIVAL_R) {
-			this.vel.setLength(dst)
-		}
+			this.target = null;
+			this.steermode = '';
+			this.BRAKING = 0; // no brake
+		   
 	  }
+  
+	  update(dt) {
+		
+			this.accumulateForce();
+			this.vel.add(this.force.clone().multiplyScalar(dt));
 
-	 // MAXSPEED modulation
-	  let speed = this.vel.length()
-	  this.vel.setLength(Math.clamp (speed, 0, this.MAXSPEED))
-	  this.pos.add(this.vel.clone().multiplyScalar(dt))
-	  this.mesh.position.copy(this.pos)
-
-	 // for orientable agent
-		if (this.vel.length() > 0.1) {
-			this.angle = Math.atan2 (-this.vel.z, this.vel.x)
-			this.mesh.rotation.y = this.angle
-		}
-}
-
-   // target, SEEK & FLEE  
-	setSeekTarget (x,y,z) {
-		this.steerMode = 'SEEK';
-		this.setTarget (x,y,z); 
-	}
+			// ARRIVAL: velocity modulation
+			if (this.target !== null) {   
+			  let diff = this.target.clone().sub(this.pos)
+			  let dst = diff.length();
+			  if (dst < this.ARRIVAL_R) {
+				this.vel.setLength(dst)
+			  }
+			}
+			
+			// MAXSPEED modulation
+			let speed = this.vel.length()
+			this.vel.setLength(Math.clamp (speed, 0, this.MAXSPEED));
+			this.pos.add(this.vel.clone().multiplyScalar(dt));
+			this.mesh.position.copy(this.pos);
+			
+			// for orientable agent
+			if (this.vel.length() > 1.0) {   // tuning
+				this.angle = Math.atan2 (-this.vel.z, this.vel.x)
+				this.mesh.rotation.y = this.angle
+			}
+	  }
   
 	setFleeTarget (x,y,z) {
+		this.BRAKING = 0; // release Brake while flee
 		this.steerMode = 'FLEE';
-		this.setTarget (x,y,z); 
+		this._setTarget (x,y,z);	
 	}
-
-	setTarget(x,y,z) {  // do not use directly
+  
+	_setTarget(x,y,z) {  // do not use outside class
 		if (this.target !== null)
 			this.target.set(x,y,z);
 		else {
 			this.target = new THREE.Vector3(x,y,z);
 		}
 	}
-
+  
 	targetInducedForce (targetPos) { 
 		let sign = 0;
-		if (this.steerMode === 'SEEK')
-			sign = 1;
-		else if (this.steerMode === 'FLEE')
-			sign = -1;
 
-		return targetPos.clone().sub(this.pos).normalize().multiplyScalar(sign*this.MAXSPEED).sub(this.vel);
+		if (this.steerMode === 'FLEE')
+			sign = -1;
+	
+	 return targetPos.clone().sub(this.pos).normalize().multiplyScalar(sign*this.MAXSPEED).sub(this.vel);
+	}
+
+	setBrake (brake) {  // make the avatar stop gracefully
+		this.BRAKING = brake;  	
+		this.target = null;  // release target
 	}
 
 	accumulateForce() {
 		if (this.target) 
-		this.force.copy(this.targetInducedForce (this.target));
+			this.force.copy(this.targetInducedForce (this.target));
+		else
+			this.force.set (0,0,0);  // for null-target initial force
+    	
+		// braking ...
+		this.force.add (this.vel.clone().multiplyScalar(-this.BRAKING));
+   	
 	}
 
 }
 
 class Agent extends Avatar {
-	 constructor (pos, mesh, name = '', brain = null, fsm,statesign) {
-		super (pos, mesh);
-		this.brain = brain;  // a function
-		this.fsm = fsm;
-		this.statesign = statesign;
-		scene.add (statesign);
-	 }
-	setFSMRun(){
-		prey.fsm.run();
-		$('#state').text("Flee!!!!");
-		$('#state').css('color', 'green');
-		this.mesh.material.color.setHex( 0x18851b );
-	}
-	 setFSMStop(){
-		prey.fsm.stop();
-		$('#state').text("Idle....");
-		$('#state').css('color', 'red');
-		this.mesh.material.color.setHex( 0xf54242 ) ;
-	}
+
+   constructor (pos, mesh, name = '', fsm) {
+      super (pos, mesh);
+	  this.fsm = fsm;
+	  // initial state got from fsm.state;
+	  this.stateSign = null;
+	  this.name = name;
+   }
+   
+   update (dt) {
+   
+		//	debugger;
+		if( this.name == 'human') super.update (dt);  // calling avatar update
+		else if( this.name == 'ghost' ){
+			keyboard.update();
+			if ( keyboard.pressed("left") ) 
+				angle += 0.03;               
+			if ( keyboard.pressed("right") )
+				angle -= 0.03;               
+			if ( keyboard.pressed("up") )  
+				speed += 0.5;        
+			if ( keyboard.pressed("down") )  
+				speed -= 0.5;    
+
+			speed = Math.clamp (speed, 0.1, 20.0);		
+			this.vel = new THREE.Vector3(speed,0,0);
 	
-	update (dt) {
-	
-		let BW = 5;
-		if (prey.pos.distanceTo (preditor.pos) < 60 - BW/2 ){
-			prey.setFleeTarget (preditor.pos.x, preditor.pos.y, preditor.pos.z);
-			prey.setFSMRun();
+			this.vel.applyAxisAngle (new THREE.Vector3(0,1,0), angle);
+			this.pos.add (this.vel.clone().multiplyScalar(dt)); 	
+			
+			preditor.mesh.position.copy(this.pos);
+			preditor.mesh.rotation.y = angle;
+			
 		}
-		else if (prey.pos.distanceTo (preditor.pos) > 60+ BW/2){
-		   prey.setFSMStop();
-		   prey.target = null;
-			// also: to make it stop then idle ...
-			prey.vel.setLength(0); 
+		// agent related ...  
+		// how to make the brain not so hyper-active
+		if (this.fsm) {
+			$('#preyState').text (this.fsm.state);
+					
+			if (this.fsm.state === 'flee')
+				super.setFleeTarget (preditor.pos.x, preditor.pos.y, preditor.pos.z)
+			if (this.fsm.state === 'idle')
+				super.setBrake (10);
+			
 		}
-	 
-		super.update (dt);  // calling avatar update
-		
-		this.statesign.position.copy(this.pos);
-		this.statesign.position.y = 9;
-	}
+		if (this.stateSign) {
+			this.stateSign.position.copy (this.pos);
+			this.stateSign.position.y = 10;
+			this.stateSign.lookAt (camera.position.x, 10, camera.position.z);
+			
+			if (this.fsm.state === 'idle') {
+				this.stateSign.children[0].material.visible = true;
+				this.stateSign.children[1].material.visible = false;
+			}
+			if (this.fsm.state === 'flee') {
+				this.stateSign.children[1].material.visible = true;
+				this.stateSign.children[0].material.visible = false;
+			}
+		}
+   }
 }
 
-class Obstacle {
-	constructor (center,size) {
-		this.center = center.clone();  
-		this.mesh = new THREE.Mesh (new THREE.CylinderGeometry(size,size,1,20),
-		new THREE.MeshBasicMaterial());
-		this.mesh.position.copy (center);
-		this.size = size;
-		scene.add (this.mesh);
-	}
+
+////////////////////////////////////////////////////////////
+function initFSM () {
+
+ let fsm = new StateMachine({
+    init: 'idle',
+    transitions: [
+      { name: 'approach',     from: 'idle',  to: 'flee' },
+      { name: 'depart',     from: 'flee', to: 'idle'},
+    ]
+  });
+  
+  return fsm; 
 }
 
 ////////////////////
 var camera, scene, renderer, clock;
-var raycaster;
-var mouse = new THREE.Vector2();
-var pickables = [];
-var targetMesh;
 
-var preditor, prey;
+var mouse = new THREE.Vector2();
+var PROPORTION = 0.003;
+var preditor, prey ,preys = [];
+var gyro;
+var keyboard = new KeyboardState();
+
+var speed, angle;
 
 init();
 animate();
 
 function agentMesh (scale=1, _color='cyan') {
- // mesh facing +x
+	// mesh facing +x
   
 	let points = [];
-   
+  
 	points.push (new THREE.Vector3(10*scale,0,0), new THREE.Vector3(0,0,-3*scale), 
-	new THREE.Vector3(0,0,3*scale), new THREE.Vector3(0,3*scale,0));
+		new THREE.Vector3(0,0,3*scale), new THREE.Vector3(0,3*scale,0));
 	let geometry = new THREE.BufferGeometry().setFromPoints (points);
 
 	let indices = [];
@@ -243,24 +237,22 @@ function agentMesh (scale=1, _color='cyan') {
 	geometry.setIndex (indices);
 	geometry.computeFaceNormals();
 	return new THREE.Mesh (geometry, 
-		new THREE.MeshBasicMaterial({color:_color, wireframe:true}))  
+       new THREE.MeshBasicMaterial({color:_color, wireframe:true}))  
 }
 
-function statesignMesh(){
+function stateSign () {
 	let loader = new THREE.TextureLoader();
-	loader.crossOrigin = '';
-	texture = loader.load('https://i.imgur.com/oKXnsrU.png');
-
-	var texMat = new THREE.MeshBasicMaterial({
-		map: texture,
-		transparent: true
-		//SalphaTest: 0.5
-	});
- 
-	return new THREE.Mesh(new THREE.PlaneGeometry(15, 8), texMat);
-	//stateSign.position.y = 9;
+	let idleMap = loader.load ("https://i.imgur.com/wMH2lff.png");
+	let fleeMap = loader.load ("https://i.imgur.com/T3xmLmy.png");
+	
+	let idleMesh = new THREE.Mesh (new THREE.PlaneGeometry(16,10), new THREE.MeshBasicMaterial(
+		{map: idleMap, transparent: true, alphaTest: 1, side:THREE.DoubleSide}));
+	let fleeMesh = new THREE.Mesh (new THREE.PlaneGeometry(16,10), new THREE.MeshBasicMaterial(
+		{map: fleeMap, transparent: true, alphaTest: 1, side:THREE.DoubleSide}));
+	let preyStateSign = new THREE.Group();
+	preyStateSign.add (idleMesh,fleeMesh);
+	return preyStateSign;
 }
-
 
 function init() {
 
@@ -270,7 +262,9 @@ function init() {
 	camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 1000);
 	camera.position.z = 120;
 	camera.position.y = 100;
-
+	gyro = new Gyroscope();
+	gyro.add(camera);
+	
 	var gridXZ = new THREE.GridHelper(240, 24, 'red', 'white');
 	scene.add(gridXZ);
 
@@ -278,77 +272,86 @@ function init() {
 	renderer.setSize(window.innerWidth, window.innerHeight);
 	renderer.setClearColor(0x888888);
 
-	let controls = new THREE.OrbitControls(camera, renderer.domElement);
+	let controls = new OrbitControls(camera, renderer.domElement);
 
 	document.body.appendChild(renderer.domElement);
 
 	/////////////////////////////////////////////////////////////////////
-	let plane = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({
-		transparent: true,
-		opacity: 0.5,
-		visible: true
+	let plane = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), new THREE.MeshBasicMaterial({
+	transparent: true,
+	opacity: 0.5,
+	visible: true
 	}));
 	scene.add(plane);
 	plane.material.visible = false
 	plane.rotation.x = -Math.PI / 2;
-	pickables = [plane];
 
-	let loader = new THREE.TextureLoader();
-	loader.crossOrigin = ""
-	let tex = loader.load ("https://i.imgur.com/GmthNU8.png");
-	targetMesh = new THREE.Mesh(new THREE.CircleGeometry(10,20), new THREE.MeshBasicMaterial({
-		map: tex,
-		transparent:true
-	}));
-	scene.add(targetMesh);
-	targetMesh.rotation.x = -Math.PI/2
-
-	raycaster = new THREE.Raycaster();
-	document.addEventListener('pointerdown', onDocumentMouseDown, false);
-  
 	////////////////////////
-	let fsm = initFSM();
-	//debugger;
-	preditor = new Agent (new THREE.Vector3(-100 + 200 * Math.random(), 0, -100 + 200 * Math.random()), 
-           agentMesh (2,'red'), 'ghost',null,fsm,statesignMesh());
-	prey = new Agent (new THREE.Vector3(-100 + 200 * Math.random(), 0, -100 + 200 * Math.random()), 
-           agentMesh (1,'cyan'), 'people', null ,fsm,statesignMesh());
-     
-	// constructor (pos, mesh, name = '', brain = null, state = '')
-	scene.obstacles = [];
-	scene.obstacles.push ( new Obstacle (new THREE.Vector3(-100 + 200 * Math.random(),0,-100 + 200 * Math.random()), 20) );
 
+	preditor = new Agent (randomPosZX(-100,100), agentMesh (2,'red'), 'ghost');
+	console.log (preditor.pos);
+	preditor.mesh.add(gyro);
+
+	for (let i = 0; i < 3; i++) {
+		prey = new Agent (new THREE.Vector3(Math.random()*200-100,0,Math.random()*200-100),agentMesh (1,'cyan'), 'human', initFSM());
+		prey.stateSign = stateSign();
+		scene.add (prey.stateSign);
+		preys.push(prey);
+	}
+	
+	//////////////////////
+	speed = 5.0;
+	angle = 0.0;
+	
 }
 
-
-function onDocumentMouseDown(event) {
-
-   event.preventDefault();
-   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-   // find intersections
-   raycaster.setFromCamera(mouse, camera);
-   var intersects = raycaster.intersectObjects(pickables);
-   if (intersects.length > 0) {
-		targetMesh.position.copy(intersects[0].point);
-		targetMesh.position.y = 0.15
-		preditor.setSeekTarget (intersects[0].point.x, intersects[0].point.y, intersects[0].point.z);
-   }
-
+function randomPosZX(min,max) {
+	let x = min + (max-min)*Math.random();
+	let z = min + (max-min)*Math.random();
+	
+	return new THREE.Vector3();//x,0,z);
 }
+
 
 function animate() {
-    requestAnimationFrame(animate);
-    render();
-   
-	let dt = clock.getDelta();
-	let cameraRoot = camera.position.clone();
-	cameraRoot.y = 0;
-	preditor.update(dt);  
-	preditor.statesign.lookAt (cameraRoot); 
-	prey.update(dt);
-	prey.statesign.lookAt (cameraRoot);
+
+	var dt = clock.getDelta();
+	
+	animate.distance = (animate.distance) ? animate.distance : 0;
+  
+	requestAnimationFrame(animate);
+	render();
+  
+	preditor.update(dt);
+	
+	preys.forEach(function(prey) { 
+		prey.update(dt);
+
+		let distanceNow = preditor.pos.distanceTo (prey.pos);
+	  
+		let BW = 10;
+		// event firing
+		if (prey.fsm.state === "flee" && distanceNow > animate.distance && distanceNow > 40+BW/2)
+			prey.fsm.depart();
+
+		if (prey.fsm.state === "idle" && distanceNow < animate.distance && distanceNow < 40-BW/2)
+			prey.fsm.approach();
+		
+		//console.log (prey.fsm.state);
+	  
+		animate.distance = distanceNow;
+		scaleStateSign(prey);
+	})
+  
+}
+function scaleStateSign(prey) {
+	let distance = prey.pos.distanceTo (camera.position);  
+
+	let size = 2*Math.tan(camera.fov*Math.PI/180 * camera.aspect/2)*PROPORTION*distance;
+	
+	preys.forEach(function(prey) { 
+		prey.stateSign.scale.set (size, size, size);
+	})
 }
 
 function render() {
