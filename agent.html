@@ -145,13 +145,11 @@ class Agent extends Avatar {
 		this.stateSign = null;
 		this.name = name;
 		this.nbhd  = [];
-		console.log(this.nbhd);
 
 	}
    
    update (dt) {
-		
-		//	debugger;
+
 		if( this.name == 'human') super.update (dt);  // calling avatar update
 		else if( this.name == 'ghost' ){
 		
@@ -180,18 +178,18 @@ class Agent extends Avatar {
 		// how to make the brain not so hyper-active
 		if (this.fsm) {
 			$('#preyState').text (this.fsm.state);
-			//console.log(this.nbhd);	
 			if (this.fsm.state === 'flee')
 				super.setFleeTarget (preditor.pos.x, preditor.pos.y, preditor.pos.z)
 				
 			if (this.fsm.state === 'idle'){
 				let save = 0;
 				
-				for (let i = 0; i < this.nbhd.length; i++) {	
-					if(this.nbhd[i].state === 'stop'){
+				for (let i = 0; i < this.nbhd.length; i++) {
+					let dst = this.distanceTo(this.nbhd[i]);
+					//console.log(dst);
+					if(this.nbhd[i].fsm.state === 'stop' && dst < 150){
 						super.setSeekTarget( this.nbhd[i].pos.x , this.nbhd[i].pos.y , this.nbhd[i].pos.z);
 						save = 1;
-						//prey.fsm.save();
 						break;
 					}
 				}
@@ -246,7 +244,7 @@ function initFSM () {
 			{ name: 'depart',   from: 'flee', to: 'idle'},
 			{ name: 'halt',     from: 'flee', to: 'stop'},
 			
-			{ name: 'save',     from: 'idle', to: 'run'},
+			{ name: 'save',     from: 'stop', to: 'idle'},
 		]
 	});
   
@@ -272,17 +270,16 @@ function findNbhd(preys) {
 	let i, j, dst;
 	let nPreys = preys.length;
   
-	// 這樣的 double-for-loop對嗎？
 	preys.forEach(function(prey){prey.nbhd=[]});
   
 	for (i = 0; i < nPreys - 1; i++) {
 		for (j = i + 1; j < nPreys; j++) {
 			dst = preys[i].distanceTo(preys[j]);
-			console.log(dst);
-			if (dst < 20) { // NBHD = 20
+			//console.log(dst);
+			//if (dst < 20) { // NBHD = 20
 				preys[i].addNbr(preys[j]);
 				preys[j].addNbr(preys[i]);
-			}
+			//}
 		}
 	}
 }
@@ -358,26 +355,13 @@ function init() {
 
 	preditor = new Agent (randomPosZX(-100,100), agentMesh (2,'red'), 'ghost');
 
-	/*
-	for (let i = 0; i < 2; i++) {
+	
+	for (let i = 0; i < 3; i++) {
 		let prey = new Agent (randomPosZX(-100,100),agentMesh (1,'cyan'), 'human', initFSM());
 		prey.stateSign = stateSign();
 		scene.add (prey.stateSign);
 		preys.push(prey);
 	}
-	*/
-	
-	let prey = new Agent (new THREE.Vector3(0,0,0),agentMesh (1,'cyan'), 'human', initFSM());
-	prey.stateSign = stateSign();
-	scene.add (prey.stateSign);
-	preys.push(prey);
-		
-		
-	let prey2 = new Agent (new THREE.Vector3(10,0,0),agentMesh (1,'cyan'), 'human', initFSM());
-	prey2.stateSign = stateSign();
-	scene.add (prey2.stateSign);
-	preys.push(prey2);
-	
 	
 	//////////////////////
 	speed = 5.0;
@@ -421,7 +405,20 @@ function animate() {
 
 		if (prey.fsm.state === "idle" && distanceNow < animate.distance && distanceNow < 40-BW/2)
 			prey.fsm.approach();
-
+		
+		let beSaved = 0;
+		
+		for (let i = 0; i < prey.nbhd.length; i++) {
+			//console.log(prey.distanceTo(prey.nbhd[i]));
+			if(prey.distanceTo(prey.nbhd[i])<10){
+				beSaved = 1;
+				break;
+			}
+		}
+		
+		if (prey.fsm.state === "stop" && beSaved === 1){
+			prey.fsm.save();
+		}
 			  
 		animate.distance = distanceNow;
 		scaleStateSign(prey);
