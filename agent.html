@@ -230,6 +230,7 @@ class Agent extends Avatar {
 	}
 	
 	addNbr(otherAgent) {
+		
 		this.nbhd.push(otherAgent);
 	}
 }
@@ -277,9 +278,10 @@ function findNbhd(preys) {
 	for (i = 0; i < nPreys - 1; i++) {
 		for (j = i + 1; j < nPreys; j++) {
 			dst = preys[i].distanceTo(preys[j]);
+			console.log(dst);
 			if (dst < 20) { // NBHD = 20
-				preys[i].addNbr(preys[j])
-				preys[j].addNbr(preys[i])
+				preys[i].addNbr(preys[j]);
+				preys[j].addNbr(preys[i]);
 			}
 		}
 	}
@@ -355,15 +357,27 @@ function init() {
 	////////////////////////
 
 	preditor = new Agent (randomPosZX(-100,100), agentMesh (2,'red'), 'ghost');
-	//console.log (preditor.pos);
-	//preditor.mesh.add(gyro);
 
-	for (let i = 0; i < 3; i++) {
+	/*
+	for (let i = 0; i < 2; i++) {
 		let prey = new Agent (randomPosZX(-100,100),agentMesh (1,'cyan'), 'human', initFSM());
 		prey.stateSign = stateSign();
 		scene.add (prey.stateSign);
 		preys.push(prey);
 	}
+	*/
+	
+	let prey = new Agent (new THREE.Vector3(0,0,0),agentMesh (1,'cyan'), 'human', initFSM());
+	prey.stateSign = stateSign();
+	scene.add (prey.stateSign);
+	preys.push(prey);
+		
+		
+	let prey2 = new Agent (new THREE.Vector3(10,0,0),agentMesh (1,'cyan'), 'human', initFSM());
+	prey2.stateSign = stateSign();
+	scene.add (prey2.stateSign);
+	preys.push(prey2);
+	
 	
 	//////////////////////
 	speed = 5.0;
