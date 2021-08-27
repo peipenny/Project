@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+<style>
+#info {
+  position: absolute;
+  top: 0px;
+  width: 100%;
+  padding: 10px;
+  text-align: center;
+  color: #ffff00
+}
+
+body {
+  overflow: hidden
+}
+#info1 {
+  position: absolute;
+  top: 0px;
+  width: 100%;
+  padding: 10px;
+  color: #ffff00
+}
+
+body {
+  overflow: hidden
+}
+#result {
+  position: absolute;
+  top: 50px;
+  width: 100%;
+  padding: 10px;
+  text-align: center;
+  color: #eb4034
+}
+</style>
+</head>
+
+<body> 
+<div id="info1">血量
+
+</div>
+<div id="info">Press 'space' to stop
+<br>
+<p id='msg'></p>
+<br>
+<p id='ghoststate'>normal mode</p></h1>
+
+<br>
+
+<p id='result'></p>
+</div>
+<script src="state-machine.js"></script>
+<script src="https://threejs.org/build/three.min.js"></script>
+<script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
+<script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
+<script src="https://jyunming-chen.github.io/tutsplus/js/KeyboardState.js"></script>
+<script src="initFSM.js"></script>
+<script src="agent.js"></script>
+<script src="main.js"></script>
+<script src="Obstacle.js"></script>
+<script src="avatar.js"></script>
+<script>
+
+
+// IIFE addition of clamp function
+( function( ) {
+      Math.clamp = function(val,min,max) {
+          return Math.min(Math.max(val,min),max);
+      } 
+} )();
+
+
+class Agent extends Avatar {
+
+    constructor (pos, mesh, name = '', fsm) {
+        super (pos, mesh);
+        this.fsm = fsm;
+        this.stateSign = null;
+        this.name = name;
+        this.nbhd  = [];
+
+    }
+   
+   update (dt) {
+
+        if( this.name == 'human') super.update (dt);  // calling avatar update
+        
+        else if( this.name == 'ghost' ){
+			
+            let obs = scene.obstacles;
+            hit = true;
+            for (let i = 0 ; i < obs.length ; i++){
+                    
+                    var k = Math.sqrt(Math.pow(ghost.pos.x - obs[i].center.x,2)+ Math.pow(ghost.pos.z - obs[i].center.z ,2));
+					
+                    if(k <= obs[i].size+8){
+                        $('#ghoststate').text ('Ghost touched the obsatcle');
+                        speed = 0;
+                        if(hit){
+                            if(gasLevel >= 0){
+                                gasLevel -= 0.01;
+                                hit = false;
+                                gasLevel = clamp (gasLevel,0,1);
+                                break;
+                            }
+                            
+                        }    
+                        break;
+                    }
+                    
+            }
+            ghost.mesh.children[2].quaternion.copy (ghost.mesh.quaternion.clone().invert());
+            ghost.mesh.children[0].quaternion.copy (ghost.mesh.quaternion.clone().invert());
+            ghost.mesh.children[3].quaternion.copy (ghost.mesh.quaternion.clone().invert());
+			ghost.mesh.children[4].quaternion.copy (ghost.mesh.quaternion.clone().invert());
+            speed = Math.clamp (speed, 0.1, 25.0);        
+            this.vel = new THREE.Vector3(speed,0,0);
+    
+            this.vel.applyAxisAngle (new THREE.Vector3(0,1,0), angle);
+            this.pos.add (this.vel.clone().multiplyScalar(dt));     
+            
+            ghost.mesh.position.copy(this.pos);
+            ghost.mesh.rotation.y = angle;
+            
+        }
+        // agent related ...  
+        // how to make the brain not so hyper-active
+        if (this.fsm) {
+            if (this.fsm.state === 'flee')
+                super.setFleeTarget (ghost.pos.x, ghost.pos.y, ghost.pos.z)
+                
+            if (this.fsm.state === 'idle'){
+				save = 0;
+                
+                for (let i = 0; i < this.nbhd.length; i++) {
+                    let dst = this.distanceTo(this.nbhd[i]);
+					let distanceNow = ghost.pos.distanceTo (this.pos);
+                    if(this.nbhd[i].fsm.state === 'stop' && dst < 150 ){
+						if(distanceNow > 80){
+							super.setSeekTarget( this.nbhd[i].pos.x , this.nbhd[i].pos.y , this.nbhd[i].pos.z);
+							save = 1;
+							break;
+						}
+						else {
+							this.fsm.approach();
+							break;
+						}
+                    }
+                }
+                if(save === 0) super.setBrake (10);
+                
+            }
+            if (this.fsm.state === 'stop')
+                super.setBrake (10);
+            
+        }
+
+        if (this.stateSign) {
+            this.stateSign.position.copy (this.pos);
+            this.stateSign.position.y = 5;
+            this.stateSign.rotation.x = -Math.PI/2;
+
+            if (this.fsm.state === 'idle') {
+                if ( save === 0 ){
+                    this.stateSign.children[0].material.visible = true;
+                    this.stateSign.children[1].material.visible = false;
+                    this.stateSign.children[2].material.visible = false;
+                    this.stateSign.children[3].material.visible = false;
+                    this.stateSign.children[4].material.visible = false;
+					this.stateSign.children[5].material.visible = false;
+                }
+                else if ( save === 1 ){
+                    this.stateSign.children[3].material.visible = true;
+                    this.stateSign.children[1].material.visible = false;
+                    this.stateSign.children[2].material.visible = false;
+                    this.stateSign.children[0].material.visible = false;
+                    this.stateSign.children[4].material.visible = false;
+					this.stateSign.children[5].material.visible = false;
+					setTimeout (ticker1, 0);
+                }
+            }
+            else if (this.fsm.state === 'flee') {
+                this.stateSign.children[1].material.visible = true;
+                this.stateSign.children[0].material.visible = false;
+                this.stateSign.children[2].material.visible = false;
+                this.stateSign.children[3].material.visible = false;
+                this.stateSign.children[4].material.visible = false;
+				this.stateSign.children[5].material.visible = false;
+                setTimeout (ticker, 0);
+
+            }
+            else if (this.fsm.state === 'stop') {
+                this.stateSign.children[2].material.visible = true;
+                this.stateSign.children[1].material.visible = false;
+                this.stateSign.children[0].material.visible = false;
+                this.stateSign.children[3].material.visible = false;
+                this.stateSign.children[4].material.visible = false;
+				this.stateSign.children[5].material.visible = false;
+                gasLevel += 0.01;
+                gasLevel = clamp (gasLevel,0.1,1);
+                
+            }
+
+        }
+   }
+   
+   distanceTo(otherAgent) {
+        return this.pos.distanceTo(otherAgent.pos);
+    }
+    
+    addNbr(otherAgent) {
+        
+        this.nbhd.push(otherAgent);
+    }
+}
+
+////////////////////
+var camera, scene, renderer, clock;
+var keyboard = new KeyboardState();
+var timer=0;
+var whRatio, halfW, halfH;
+
+var mouse = new THREE.Vector2();
+var PROPORTION = 0.003;
+var ghost ,humans = [];
+var save;
+
+var speed, angle;
+var gasLevel = 1,hit = true,tachometer,tachometer1,gas = 1,N2,blood;
+
+var puffs = [];
+const NPUFFS = 50;
+var which = 0;
+
+var timer=0;
+var blink = false;
+var whichOne=0;
+var tickerOn = false;
+const TICKER_PERIOD =  1000;
+
+var clockOn = false; 
+var id;
+var result;
+init();
+animate();
+
+function findNbhd(humans) {
+	//console.log(agents);
+	let i, j, dst;
+	let nhumans = humans.length;
+  
+	humans.forEach(function(human){human.nbhd=[]});
+  
+	for (i = 0; i < nhumans - 1; i++) {
+		for (j = i + 1; j < nhumans; j++) {
+			dst = humans[i].distanceTo(humans[j]);
+			//console.log(dst);
+			//if (dst < 20) { // NBHD = 20
+				humans[i].addNbr(humans[j]);
+				humans[j].addNbr(humans[i]);
+			//}
+		}
+	}
+}
+
+function clamp (v, vLo, vHi) {
+	if (v < vLo) return vLo;
+	if (v > vHi) return vHi;
+	return v;
+}
+
+function randomPosZX(min,max) {
+	let x = min + (max-min)*Math.random();
+	let z = min + (max-min)*Math.random();
+	
+	return new THREE.Vector3(x,0,z);
+}
+
+
+function chooseOne (whichOne) {
+	var dt = clock.getDelta();
+	ghost.update(dt*2);
+	humans.forEach(function(human) { 
+		human.update(dt);
+		if (human.fsm.state === "flee"){
+			for (let i = 0; i < human.stateSign.children.length; i++)
+			human.stateSign.children[i].material.visible = false;
+
+			human.stateSign.children[whichOne].material.visible = true;
+		}
+		
+	})
+	
+}
+function chooseOne1 (whichOne) {
+	var dt = clock.getDelta();
+	ghost.update(dt*2);
+	humans.forEach(function(human) { 
+		human.update(dt);
+		if (human.fsm.state === "idle" && save === 1){
+			for (let i = 0; i < human.stateSign.children.length; i++)
+			human.stateSign.children[i].material.visible = false;
+
+			human.stateSign.children[whichOne].material.visible = true;
+		}
+		
+	})
+	
+}
+
+function ticker() {
+  
+	if (ticker.red) {
+		chooseOne (1);
+	} else {
+		chooseOne (4);
+	}
+
+	ticker.red = ! ticker.red;
+
+	setTimeout (ticker, 100);
+}
+function ticker1() {
+  
+	if (ticker1.red) {
+		chooseOne1 (3);
+	} else {
+		chooseOne1 (5);
+	}
+
+	ticker1.red = ! ticker1.red;
+
+	setTimeout (ticker1, 100);
+}
+
+function updateTachometer (power) {
+	ghost.mesh.children[3].children[0].scale.x = power;
+	blood.children[0].scale.x = power;
+}
+function updateTachometer1 (power) {
+	ghost.mesh.children[4].children[0].scale.x = power;
+	N2.children[0].scale.x = power;
+	
+	
+}
+function scaleStateSign(human) {
+	let distance = human.pos.distanceTo (camera.position);  
+
+	let size = 2*Math.tan(camera.fov*Math.PI/180 * camera.aspect/2)*PROPORTION*distance;
+	
+	humans.forEach(function(human) { 
+		human.stateSign.scale.set (size, size, size);
+	})
+}
+
+function render() {
+	renderer.render(scene, camera);
+}
+
+</script>
+</body>
+
+</html>
